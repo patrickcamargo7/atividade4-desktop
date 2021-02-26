@@ -1,43 +1,98 @@
-// Modules to control application life and create native browser window
-const {app, BrowserWindow} = require('electron')
+const {app, BrowserWindow, ipcMain} = require('electron')
 const path = require('path')
+const { v4: uuidv4 } = require('uuid');
+
+let tasks = [
+  {
+    id: 2,
+    description: 'first',
+    finished: false,
+  }
+]
 
 function createWindow () {
-  // Create the browser window.
   const mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
+    show: false,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js')
+      nodeIntegration: true,
     }
   })
 
-  // and load the index.html of the app.
-  mainWindow.loadFile('index.html')
+  mainWindow.loadFile('./src/screens/home/index.html')
 
-  // Open the DevTools.
-  // mainWindow.webContents.openDevTools()
+  mainWindow.once("ready-to-show", () => {
+    mainWindow.show()
+  })
 }
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
   createWindow()
   
   app.on('activate', function () {
-    // On macOS it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
 app.on('window-all-closed', function () {
   if (process.platform !== 'darwin') app.quit()
 })
 
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and require them here.
+let createTaskWindow
+
+ipcMain.handle('task:new', async () => {
+  createTaskWindow = createTask()
+  
+  createTaskWindow.show()
+});
+
+ipcMain.on('task:save', async (e, task) => {
+  try {
+  task = {...task, id: uuidv4() }
+  tasks.push(task)
+  createTaskWindow.close()
+  e.reply('task:reload', 'reload')
+  console.log('\n\nSalvando...')
+  } catch (e) {
+    console.log(e);
+  }
+});
+
+ipcMain.on('task:done', async (e, id) => {
+  tasks = tasks.map((task) => {
+    if (task.id == id) {
+      return {
+        ...task,
+        finished: true,
+      }
+    }
+    return task
+  })
+
+  e.reply('task:reload', 'reload')
+});
+
+ipcMain.handle('task:load', async () => {
+  return tasks
+});
+
+function createTask() {
+  const createTaskWindow = new BrowserWindow({
+    visible: false,
+    width: 300,
+    height: 300,
+    show: false,
+    webPreferences: {
+      nodeIntegration: true,
+    }
+  })
+
+  createTaskWindow.loadFile('./src/screens/tasks/new_task.html')
+
+  createTaskWindow.once("ready-to-show", () => {
+    createTaskWindow.show()
+  })
+
+  return createTaskWindow
+}
